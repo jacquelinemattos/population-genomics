@@ -772,28 +772,364 @@ xtx_pos[xtx_pos$M_XtX >= threshold_fdr0.05, ]
 
 #-----------------------------------------------------#
 
-#### Genotype-Environment Association Analyses - GEA - With RDA - Redundancy Analysis####
+#### Genotype-Environment Association Analyses - With RDA (Redundancy Analysis)####
 
-geno <- read.table("02_data/geno_matrix.txt")
-SNP_pos <- read.table("02_data/SNP_pos.txt", header = TRUE)
+library(vegan)    # Used to run PCA & RDA
+library(lfmm)     # Used to run LFMM
+library(LEA)
+library(vcfR)
+library(ggplot2)
 
-# transpose data and give meaningful colnames
+# use the library vcfR to convert the VCF into the OutFLANK format
+vcf_file <- "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Final_VCF/PLINK_LD/vcf_pruned_by_plink.vcf"
+obj.vcfR <- read.vcfR(vcf_file, verbose = FALSE)
+
+
+# extract information about SNP id and position
+position <- getPOS(obj.vcfR) # positions in bp
+chromosome <- getCHROM(obj.vcfR) # chromosome information
+id_snp <- getID(obj.vcfR) # ID of the SNP
+
+# gather this info in a dataframe
+chr_pos <- as.data.frame(cbind(id_snp, chromosome, position)) # save info about id, chr, position
+str(chr_pos) # explore the column types
+
+# R is sometimes not good at categorizing columns, and here we had a problem that bp position was converted to a character and we need it as a number 
+# use this command to transform this column into numeric
+chr_pos$position <- as.numeric(as.character(chr_pos$position)) 
+
+# extract and format the genotype matrix
+geno <- extract.gt(obj.vcfR) # character matrix containing the genotypes
+#SNP position table
+SNP_pos <- chr_pos
+
+
+geno# transpose data and give meaningful colnames
 gen <- t(geno)
 colnames(gen) <- paste(SNP_pos$chromosome, SNP_pos$position, sep = "_")
 gen [1:10, 1:10]
+dim(gen)
 
-# replace 9 by NA
+
+# Converting values on "geno" matrix to 0, 1, and 2; instead of 0/0, 0/1, 1/0, 1/1. 
+#0/0 = 0 = homozygote 
+#1/0 and 0/1 = 1 = heterozygote 
+#1/1 = 2 = homozygote for the alternative allele 
+
+library(dplyr)
+
+#transforming the genotype matrix to a dataframe
+genotype_df <- as.data.frame(gen, stringsAsFactors = FALSE)
+
+#replacing specific values using dplyr::recode()
+
+genotype_df[] <- lapply(genotype_df, function(col) {recode(col, "0/0" = 0, "0/1" = 1, "1/0" = 1, "1/1" = 2)})
+print(genotype_df)
+
+
+# replace 9 by NA - 9 is already NAs in my matrix!
 gen[which(gen == "9")] <- NA
+
 # evaluate % of missing
-sum(is.na(gen))/(dim(gen)[1]*dim(gen)[2]) # <3% of missing data
+sum(is.na(genotype_df))/(dim(genotype_df)[1]*dim(genotype_df)[2]) # 4% of missing data
+sum(is.na(genotype_df))
+
 # impute missing with the most common geno
-gen.imp <- apply(gen, 2, function(x) replace(x, is.na(x), as.numeric(names(which.max(table(x))))))
-sum(is.na(gen.imp)) # No NAs
+gen.imp <- apply(genotype_df, 2, function(x) replace(x, is.na(x), as.numeric(names(which.max(table(x))))))
 
-#Let's look now at our environmental/pheno matrix.
+# we can't have NAs from now on
+sum(is.na(gen.imp)) 
+gen.imp
 
-info <- read.table("02_data/info_samples_canada.txt", header = TRUE)
-head(info)
+str(gen.imp)
+
+    
+#Let's look now at our environmental/phenotype matrix.
+install.packages("psych")
+library(psych)
+
+env <- read.csv2("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Environmental_Data/pop_ind_lat_long_env_data_important_env_variables.csv", header = TRUE)
+head(env)
+
+# Make individual names characters (not factors)
+env$individual_ID <- as.character(env$individual_ID)
+
+# Confirm that genotypes and environmental data are in the same order
+identical(rownames(gen.imp), env[,1]) 
+
+env[,1]
+row.names(gen.imp)
+
+pairs.panels(env[,5:7], scale=T)
+
+
+#Run RDA on environmental variable and test it
+
+## RDA FOR TEMPERATURE (mean annual temperature) ##
+
+# load package
+library(vegan)
+
+# run rda
+temp.rda <- vegan::rda(gen.imp ~ env$temperature, scale = TRUE)
+temp.rda
+
+#Looking at the fraction of variance explained by the 1st axis of the RDA
+RsquareAdj(temp.rda)
+
+
+#Test the significance of the model using permutation tests.
+temp.signif.full <- anova.cca(temp.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+temp.signif.full
+
+#Analyse the RDA output
+#We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
+
+#jpeg("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/RDA/RDA-temperature")
+
+plot(temp.rda, scaling = 3) 
+points(temp.rda, display = "sites", pch = 20, cex = 1.3, col = as.factor(pop_info$population), scaling = 3)
+
+
+#### RDA for all three environmental variables ####
+
+# load package
+library(vegan)
+
+# run rda
+env.rda <- vegan::rda(gen.imp ~ ., data=env[,5:7], scale = TRUE)
+env.rda
+
+#Looking at the fraction of variance explained by the 1st axis of the RDA
+RsquareAdj(env.rda)
+
+#$adj.r.squared
+#[1] 0.09908134
+
+#Our constrained ordination explains very little about the variation (9%); this low explanatory power is not surprising given that we expect that most of the SNPs in our dataset will not show a relationship with the environmental predictors (e.g., most SNPs will be neutral).
+
+#The eigenvalues for the constrained axes reflect the variance explained by each canonical axis:
+
+summary(eigenvals(env.rda, model = "constrained"))
+screeplot(env.rda)
+
+
+#Test the significance of the model using permutation tests.
+#Now let’s check our RDA model for significance using formal tests. We can assess both the full model and each constrained axis using F-statistics (Legendre et al, 2010). The null hypothesis is that no linear relationship exists between the SNP data and the environmental predictors. See ?anova.cca for more details and options.
+
+env.signif.full <- anova.cca(env.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+env.signif.full
+
+#Analyse the RDA output
+#We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
+
+#jpeg("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/RDA/RDA-temperature")
+
+populations <- c("Ubatuba", "Bertioga", "Cardoso", "Floripa", "Torres", "Itapua", "Arambare", "Pelotas")
+pop_colors <- c("Ubatuba" = "#D0B663", "Bertioga" = "#1f78b4", "Cardoso" = "#ffff33", "Floripa" = "#a6cee3", "Torres" = "#33a02c", "Itapua" = "#7CACBA", "Arambare" = "#7BC9A2", "Pelotas" = "#927BC9")
+
+
+plot(env.rda, type="n", scaling = 3) 
+points(env.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
+points(env.rda, display = "sites", pch = 20, cex = 1.7, col=pop_colors[populations], scaling = 3)   # the individuals
+text(env.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
+legend("topleft", legend=pop_info$population, bty="n", col="gray32", pch=21, cex=0.9, pt.bg=pop_colors)
+
+
+
+#### Identifying candidate SNPs for local adaptation ####
+
+#We’ll use the loadings of the SNPs in the ordination space to determine which SNPs are candidates for local adaptation. The SNP loadings are stored as species in the RDA object. We’ll extract the SNP loadings from the three significant constrained axes
+
+load.rda <- scores(env.rda, choices=c(1:3), display="species")  # Species scores for the first three constrained axes
+
+#If we look at histograms of the loadings on each RDA axis, we can see their (relatively normal) distributions. SNPs loading at the center of the distribution are not showing a relationship with the environmental predictors; those loading in the tails are, and are more likely to be under selection as a function of those predictors (or some other predictor correlated with them).
+
+hist(load.rda[,1], main="Loadings on RDA1")
+hist(load.rda[,2], main="Loadings on RDA2")
+hist(load.rda[,3], main="Loadings on RDA3") 
+
+
+#I’ve written a simple function to identify SNPs that load in the tails of these distributions. We’ll start with a 3 standard deviation cutoff (two-tailed p-value = 0.0027). As with all cutoffs, this can be modified to reflect the goals of the analysis and our tolerance for true positives vs. false positives. For example, if you needed to be very conservative and only identify those loci under very strong selection (i.e., minimize false positive rates), you could increase the number of standard deviations to 3.5 (two-tailed p-value = 0.0005). This would also increase the false negative rate. If you were less concerned with false positives, and more concerned with identifying as many potential candidate loci as possible (including those that may be under weaker selection), you might choose a 2.5 standard deviation cutoff (two-tailed p-value = 0.012).
+
+#I define the function here as outliers, where x is the vector of loadings and z is the number of standard deviations to use
+
+outliers <- function(x,z){
+  lims <- mean(x) + c(-1, 1) * z * sd(x)     # find loadings +/-z sd from mean loading     
+  x[x < lims[1] | x > lims[2]]               # locus names in these tails
+}
+
+
+#Now let’s apply it to each significant constrained axis
+
+cand1 <- outliers(load.rda[,1],3) # 3
+cand2 <- outliers(load.rda[,2],3) # 290
+cand3 <- outliers(load.rda[,3],3) # 154
+
+ncand <- length(cand1) + length(cand2) + length(cand3)
+ncand # 447 candidate SNPs for local adaptation
+
+
+#______________________________________________________#
+
+#### RDA with PC scores from environmental PCAs ####
+
+env <- read.csv2("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Environmental_Data/pop_ind_lat_long_env_data_PCs.csv", header = TRUE)
+
+PCs_data <- env[,5:8]
+
+# Run all steps above first, and then continue from here:
+
+# run rda
+env.rda <- vegan::rda(gen.imp ~ ., data=env[,5:8], scale = TRUE)
+env.rda
+
+#Looking at the fraction of variance explained by the 1st axis of the RDA
+RsquareAdj(env.rda)
+
+#$adj.r.squared
+#[1] 0.1124486
+
+#Our constrained ordination explains very little about the variation (11%); this low explanatory power is not surprising given that we expect that most of the SNPs in our dataset will not show a relationship with the environmental predictors (e.g., most SNPs will be neutral).
+
+#The eigenvalues for the constrained axes reflect the variance explained by each canonical axis:
+
+summary(eigenvals(env.rda, model = "constrained"))
+screeplot(env.rda)
+
+
+#Test the significance of the model using permutation tests.
+#Now let’s check our RDA model for significance using formal tests. We can assess both the full model and each constrained axis using F-statistics (Legendre et al, 2010). The null hypothesis is that no linear relationship exists between the SNP data and the environmental predictors. See ?anova.cca for more details and options.
+
+env.signif.full <- anova.cca(env.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+env.signif.full
+
+#Analyse the RDA output
+#We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
+
+populations <- c("Ubatuba", "Bertioga", "Cardoso", "Floripa", "Torres", "Itapua", "Arambare", "Pelotas")
+pop_colors <- c("Ubatuba" = "#D0B663", "Bertioga" = "#1f78b4", "Cardoso" = "#ffff33", "Floripa" = "#a6cee3", "Torres" = "#33a02c", "Itapua" = "#7CACBA", "Arambare" = "#7BC9A2", "Pelotas" = "#927BC9")
+
+
+plot(env.rda, type="n", scaling = 3) 
+points(env.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
+points(env.rda, display = "sites", pch = 20, cex = 1.7, col=pop_colors[populations], scaling = 3)   # the individuals
+text(env.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
+legend("topleft", legend=pop_info$population, bty="n", col="gray32", pch=21, cex=0.9, pt.bg=pop_colors)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#______________________________________________________#
+
+#### GEA with BayPass ####
+
+# load package
+library(ggplot2)
+library(vcfR)
+
+# use the library vcfR (the one with all SNPs, and not only the pruned snps)
+vcf_file <- "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Final_VCF/epidendrum-final-variants-removed.maf_miss.vcf"
+obj.vcfR_allSNPs <- read.vcfR(vcf_file, verbose = FALSE)
+
+# extract information about SNP id and position
+position <- getPOS(obj.vcfR_allSNPs) # positions in bp
+chromosome <- getCHROM(obj.vcfR_allSNPs) # chromosome information
+id_snp <- getID(obj.vcfR_allSNPs) # ID of the SNP
+
+# gather this info in a dataframe
+chr_pos_allSNPs <- as.data.frame(cbind(id_snp, chromosome, position)) # save info about id, chr, position
+str(chr_pos_allSNPs) # explore the column types
+
+#Like we did before we can plot the XtX but we will mostly be interested in the BF value (Bayesian factor of association with an environmental variable). You will find it in the files ending with betai_reg.out in the column BF.dB. "the Bayes Factor (column BF(dB)) in dB units (i.e., 10 × log10(BF)) measuring the support of the association of each SNP with each population covariable and the corresponding regression coefficients βi (column Beta_is)" BF can be informative in itself, good candidate are usually above 20. Following the rule of Jeffrey, we can consider BF as meaning
+
+#< 3 --> nothing
+#3 to 10 --> weak support
+#10 to 20 --> interesting
+#more than 20 --> strong support
+
+# load Bayesian Factors values from the new table (from real SNPs dataset)
+BF_allsnps <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/allsnps_environment_controlled.output_summary_betai_reg.out", header = TRUE)
+head(BF_allsnps)
+# we will be working with the BF (the Bayesian Factor) values now
+
+# load position info about the SNPs
+#SNP_pos <- read.table("02_data/SNP_pos.txt", header = TRUE)
+SNP_pos <- chr_pos_allSNPs
+
+# should be same number of rows
+dim(BF_allsnps)
+dim(SNP_pos)
+
+
+BF_pos <- cbind(SNP_pos, BF_allsnps)
+
+ggplot(BF_pos, aes(x = position, y = BF_allsnps$BF.dB., colour = chromosome)) + 
+  geom_point() +
+  theme_classic() +
+  facet_grid(cols = vars(chromosome), scales = "free_x", space = "free_x")
+
+
+#Now we realised that we really need to know at which value we put the threshold:
+
+# load BF (bayes factor) values from simulated data
+BF_simu <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/simulated_enviroment_controlled.output_summary_betai_reg.out", header = TRUE)
+head(BF_simu)
+
+# calculate the threshold
+threshold_fdr0.01 = quantile(BF_simu$BF.dB, probs = 0.99)
+threshold_fdr0.05 = quantile(BF_simu$BF.dB, probs = 0.95)
+
+
+#selecting only the 12 chromosomes
+BFpos_12chrs <- dplyr::filter(BF_pos, chromosome %in% c("scaffold_1", "scaffold_2", "scaffold_3", "scaffold_4", "scaffold_5", "scaffold_6", "scaffold_7", "scaffold_8", "scaffold_9", "scaffold_10", "scaffold_11", "scaffold_12"))
+
+
+# add it on the plot
+ggplot(BFpos_12chrs, aes(x = position, y = BF.dB., colour = chromosome)) + 
+  geom_point() +
+  theme_classic() +
+  facet_grid(cols = vars(chromosome), scales = "free_x", space = "free_x") +
+  geom_hline(aes(yintercept = threshold_fdr0.05), linetype = "dotted", linewidth = 1, col = "red", show.legend = FALSE) +
+  geom_hline(aes(yintercept = threshold_fdr0.01), linetype = "dotted", linewidth = 1, show.legend = FALSE)
+
+# output outliers
+BF_pos[BF_pos$BF.dB. >= threshold_fdr0.05, ]
+
+#### Exporting the outliers that are associated with the environmental variables ####
+
+#We can export the list of outlier SNPs for subsequent analysis. Here is the code for the controlled models.
+
+# load bf values
+bf_allsnps <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/allsnps_environment_controlled.output_summary_betai_reg.out", header = TRUE)
+bf_pos <- cbind(SNP_pos, bf_allsnps)
+
+# load bf values from simulatd data
+bf_simu <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/simulated_enviroment_controlled.output_summary_betai_reg.out", header = TRUE)
+
+# calculate the threshold from simulations (or you can use BF = 10)
+threshold_fdr0.01 = quantile(bf_simu$BF.dB, probs = 0.99)
+threshold_fdr0.05 = quantile(bf_simu$BF.dB, probs = 0.95)
+
+outliers <- bf_pos[bf_pos$BF.dB >= threshold_fdr0.05, ]
+outliers
+write.table(outliers, "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/outlier_temp_bp.txt", row.names = FALSE, quote = FALSE, sep = "\t")
+
+
+
+
+
 
 
 
