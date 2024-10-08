@@ -863,6 +863,8 @@ row.names(gen.imp)
 pairs.panels(env[,5:7], scale=T)
 
 
+#______________________________________________________#
+
 #Run RDA on environmental variable and test it
 
 ## RDA FOR TEMPERATURE (mean annual temperature) ##
@@ -890,6 +892,9 @@ temp.signif.full
 plot(temp.rda, scaling = 3) 
 points(temp.rda, display = "sites", pch = 20, cex = 1.3, col = as.factor(pop_info$population), scaling = 3)
 
+
+
+#______________________________________________________#
 
 #### RDA for all three environmental variables ####
 
@@ -923,18 +928,119 @@ env.signif.full
 #Analyse the RDA output
 #We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
 
-#jpeg("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/RDA/RDA-temperature")
+## extract % explained by the first 2 axes
+perc <- round(100*(summary(env.rda)$cont$importance[2, 1:2]), 2)
+perc
 
-populations <- c("Ubatuba", "Bertioga", "Cardoso", "Floripa", "Torres", "Itapua", "Arambare", "Pelotas")
-pop_colors <- c("Ubatuba" = "#D0B663", "Bertioga" = "#1f78b4", "Cardoso" = "#ffff33", "Floripa" = "#a6cee3", "Torres" = "#33a02c", "Itapua" = "#7CACBA", "Arambare" = "#7BC9A2", "Pelotas" = "#927BC9")
+#associating populations with colors
+
+populations <- env$population
+pop_colors <- c("Ubatuba" = "#CC79A7", "Bertioga" = "darkolivegreen2", "Cardoso" = "#927BC9", "Floripa" = "#F0E442", "Torres" = "#009E73", "Itapua" = "#56B4E9", "Arambare" = "#E69F00", "Pelotas" = "#000000")
+
+#Map the population labels to their corresponding colors
+point_colors <- pop_colors[populations]
+point_colors
 
 
-plot(env.rda, type="n", scaling = 3) 
+plot(env.rda, type="n", scaling = 3, xlab = paste0("RDA1 (", perc[1], "%)"), ylab = paste0("RDA2 (", perc[2], "%)") ) 
 points(env.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
-points(env.rda, display = "sites", pch = 20, cex = 1.7, col=pop_colors[populations], scaling = 3)   # the individuals
+points(env.rda, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3)   # the individuals
 text(env.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
-legend("topleft", legend=pop_info$population, bty="n", col="gray32", pch=21, cex=0.9, pt.bg=pop_colors)
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
 
+
+
+#checking data to color populations
+
+length(populations) #80
+nrow(sc_si) #80
+
+unique(populations)
+
+
+#______________________________________________________#
+
+#simple plots
+plot(env.rda, type="n", scaling = 3)
+points(env.rda, display = "sites", pch = 20, cex = 1.3, col = point_colors, scaling = 3)
+
+
+#simple triplot
+ordiplot(env.rda, scaling = 1, type = "text")
+
+
+#custom triplot, step by step
+
+## extract scores - these are coordinates in the RDA space
+sc_si <- scores(env.rda, display="sites", choices=c(1,2), scaling=1)
+sc_sp <- scores(env.rda, display="species", choices=c(1,2), scaling=1)
+sc_bp <- scores(env.rda, display="bp", choices=c(1, 2), scaling=1)
+
+## extract % explained by the first 2 axes
+perc <- round(100*(summary(env.rda)$cont$importance[2, 1:2]), 2)
+perc
+
+#### Custom RDA triplot, step by step ####
+
+# Set up a blank plot with scaling, axes, and labels
+plot(env.rda,
+     scaling = 1, # set scaling type 
+     type = "none", # this excludes the plotting of any points from the results
+     frame = FALSE,
+     # set axis limits
+     xlim = c(-4,4), 
+     ylim = c(-4,4),
+     # label the plot (title, and axes)
+     main = "Triplot RDA - scaling 1",
+     xlab = paste0("RDA1 (", perc[1], "%)"), 
+     ylab = paste0("RDA2 (", perc[2], "%)") 
+)
+# add points for site scores
+points(sc_si, 
+       pch = 21, # set shape (here, circle with a fill colour)
+       col = "black", # outline colour
+       bg = point_colors, # fill colour
+       cex = 1.2) # size
+
+# add points for species scores
+#points(sc_sp, 
+#       pch = 22, # set shape (here, square with a fill colour)
+#       col = "black",
+#       bg = "#D0B663", 
+#       cex = 1.2)
+
+# add text labels for species abbreviations
+text(sc_si + c(0.03, 0.09), # adjust text coordinates to avoid overlap with points 
+     labels = rownames(sc_si), 
+     col = "grey40", 
+     font = 2, # bold
+     cex = 0.6)
+
+# the predictors
+# add arrows for effects of the explanatory variables
+#arrows(0,0, # start them from (0,0)
+#       sc_bp[,1], sc_bp[,2], # end them at the score value
+#       col = "#33a02c", 
+#       lwd = 3)
+
+# add environmental predictors
+text(env.rda, scaling=1, display="bp", col="#33a02c", cex=0.9)                           # the predictors
+
+
+# add text labels for arrows
+text(x = sc_bp[,1] +3, # adjust text coordinate to avoid overlap with arrow tip
+     y = sc_bp[,2] +3, 
+     labels = rownames(sc_bp), 
+     col = "#33a02c", 
+     cex = 0.7, 
+     font = 2)
+
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
+
+
+
+
+#______________________________________________________#
 
 
 #### Identifying candidate SNPs for local adaptation ####
@@ -970,6 +1076,8 @@ ncand <- length(cand1) + length(cand2) + length(cand3)
 ncand # 447 candidate SNPs for local adaptation
 
 
+
+
 #______________________________________________________#
 
 #### RDA with PC scores from environmental PCAs ####
@@ -981,11 +1089,11 @@ PCs_data <- env[,5:8]
 # Run all steps above first, and then continue from here:
 
 # run rda
-env.rda <- vegan::rda(gen.imp ~ ., data=env[,5:8], scale = TRUE)
-env.rda
+env.rda_PCs <- vegan::rda(gen.imp ~ ., data=env[,5:8], scale = TRUE)
+env.rda_PCs
 
 #Looking at the fraction of variance explained by the 1st axis of the RDA
-RsquareAdj(env.rda)
+RsquareAdj(env.rda_PCs)
 
 #$adj.r.squared
 #[1] 0.1124486
@@ -994,34 +1102,184 @@ RsquareAdj(env.rda)
 
 #The eigenvalues for the constrained axes reflect the variance explained by each canonical axis:
 
-summary(eigenvals(env.rda, model = "constrained"))
-screeplot(env.rda)
+summary(eigenvals(env.rda_PCs, model = "constrained"))
+screeplot(env.rda_PCs)
 
 
 #Test the significance of the model using permutation tests.
 #Now let’s check our RDA model for significance using formal tests. We can assess both the full model and each constrained axis using F-statistics (Legendre et al, 2010). The null hypothesis is that no linear relationship exists between the SNP data and the environmental predictors. See ?anova.cca for more details and options.
 
-env.signif.full <- anova.cca(env.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+env.signif.full <- anova.cca(env.rda_PCs, parallel = getOption("mc.cores")) # default is permutation = 999
 env.signif.full
 
 #Analyse the RDA output
 #We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
 
-populations <- c("Ubatuba", "Bertioga", "Cardoso", "Floripa", "Torres", "Itapua", "Arambare", "Pelotas")
-pop_colors <- c("Ubatuba" = "#D0B663", "Bertioga" = "#1f78b4", "Cardoso" = "#ffff33", "Floripa" = "#a6cee3", "Torres" = "#33a02c", "Itapua" = "#7CACBA", "Arambare" = "#7BC9A2", "Pelotas" = "#927BC9")
+#associating populations with colors
+
+populations <- env$population
+pop_colors <- c("Ubatuba" = "#CC79A7", "Bertioga" = "darkolivegreen2", "Cardoso" = "#927BC9", "Floripa" = "#F0E442", "Torres" = "#009E73", "Itapua" = "#56B4E9", "Arambare" = "#E69F00", "Pelotas" = "#000000")
+
+#Map the population labels to their corresponding colors
+point_colors <- pop_colors[populations]
+point_colors
+
+## extract % explained by the first 2 axes
+perc_PCs <- round(100*(summary(env.rda_PCs)$cont$importance[2, 1:2]), 2)
+perc_PCs
 
 
-plot(env.rda, type="n", scaling = 3) 
-points(env.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
-points(env.rda, display = "sites", pch = 20, cex = 1.7, col=pop_colors[populations], scaling = 3)   # the individuals
-text(env.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
-legend("topleft", legend=pop_info$population, bty="n", col="gray32", pch=21, cex=0.9, pt.bg=pop_colors)
+plot(env.rda_PCs, type="n", scaling = 3, xlab = paste0("RDA1 (", perc_PCs[1], "%)"), ylab = paste0("RDA2 (", perc_PCs[2], "%)")) 
+points(env.rda_PCs, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
+points(env.rda_PCs, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3)   # the individuals
+text(env.rda_PCs, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
+legend("bottomright", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
+
+
+#custom triplot, step by step
+
+## extract scores - these are coordinates in the RDA space
+sc_si_PCs <- scores(env.rda_PCs, display="sites", choices=c(1,2), scaling=1)
+sc_sp_PCs <- scores(env.rda_PCs, display="species", choices=c(1,2), scaling=1)
+sc_bp_PCs <- scores(env.rda_PCs, display="bp", choices=c(1, 2), scaling=1)
 
 
 
+#______________________________________________________#
+
+#### RDA for ALL BIOCLIM variables ####
 
 
+#BIOCLIM <- read.csv("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Environmental_Variables/extracted_ALL_BIOCLIM_10min.csv", header = TRUE)
 
+env_allBIOCLIM <- read.csv2("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Environmental_Data/pop_ind_lat_long_env_data_ALL_BIOCLIM.csv", header = TRUE)
+
+all_bioclim <- env_allBIOCLIM[,5:23]
+all_bioclim$bio1
+
+# load package
+library(vegan)
+
+# run rda
+env_allBIOCLIM.rda <- vegan::rda(gen.imp ~ ., data=all_bioclim, scale = TRUE)
+env_allBIOCLIM.rda
+
+#Looking at the fraction of variance explained by the 1st axis of the RDA
+RsquareAdj(env_allBIOCLIM.rda)
+
+#$adj.r.squared
+#[1] 0.09908134
+
+#Our constrained ordination explains very little about the variation (9%); this low explanatory power is not surprising given that we expect that most of the SNPs in our dataset will not show a relationship with the environmental predictors (e.g., most SNPs will be neutral).
+
+#The eigenvalues for the constrained axes reflect the variance explained by each canonical axis:
+
+summary(eigenvals(env_allBIOCLIM.rda, model = "constrained"))
+screeplot(env_allBIOCLIM.rda)
+
+
+#Test the significance of the model using permutation tests.
+#Now let’s check our RDA model for significance using formal tests. We can assess both the full model and each constrained axis using F-statistics (Legendre et al, 2010). The null hypothesis is that no linear relationship exists between the SNP data and the environmental predictors. See ?anova.cca for more details and options.
+
+env.signif.full <- anova.cca(env_allBIOCLIM.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+env.signif.full
+
+#Analyse the RDA output
+#We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
+
+## extract % explained by the first 2 axes
+perc <- round(100*(summary(env_allBIOCLIM.rda)$cont$importance[2, 1:2]), 2)
+perc
+
+#associating populations with colors
+
+populations <- env$population
+pop_colors <- c("Ubatuba" = "#CC79A7", "Bertioga" = "darkolivegreen2", "Cardoso" = "#927BC9", "Floripa" = "#F0E442", "Torres" = "#009E73", "Itapua" = "#56B4E9", "Arambare" = "#E69F00", "Pelotas" = "#000000")
+
+#Map the population labels to their corresponding colors
+point_colors <- pop_colors[populations]
+point_colors
+
+
+plot(env_allBIOCLIM.rda, type="n", scaling = 3, xlab = paste0("RDA1 (", perc[1], "%)"), ylab = paste0("RDA2 (", perc[2], "%)") ) 
+points(env_allBIOCLIM.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
+points(env_allBIOCLIM.rda, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3)   # the individuals
+text(env_allBIOCLIM.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
+
+
+#simple plots
+plot(env_allBIOCLIM.rda, type="n", scaling = 3)
+points(env_allBIOCLIM.rda, display = "sites", pch = 20, cex = 1.3, col = point_colors, scaling = 3)
+ordiplot(env_allBIOCLIM.rda, scaling = 1, type = "text")
+
+
+#custom triplot, step by step
+## extract scores - these are coordinates in the RDA space
+sc_si <- scores(env_allBIOCLIM.rda, display="sites", choices=c(1,2), scaling=1)
+sc_sp <- scores(env_allBIOCLIM.rda, display="species", choices=c(1,2), scaling=1)
+sc_bp <- scores(env_allBIOCLIM.rda, display="bp", choices=c(1, 2), scaling=1)
+
+## extract % explained by the first 2 axes
+perc <- round(100*(summary(env_allBIOCLIM.rda)$cont$importance[2, 1:2]), 2)
+perc
+
+#### Custom RDA triplot, step by step ####
+
+# Set up a blank plot with scaling, axes, and labels
+plot(env_allBIOCLIM.rda,
+     scaling = 1, # set scaling type 
+     type = "none", # this excludes the plotting of any points from the results
+     frame = FALSE,
+     # set axis limits
+     xlim = c(-4,4), 
+     ylim = c(-4,4),
+     # label the plot (title, and axes)
+     main = "Triplot RDA - scaling 1",
+     xlab = paste0("RDA1 (", perc[1], "%)"), 
+     ylab = paste0("RDA2 (", perc[2], "%)") 
+)
+# add points for site scores
+points(sc_si, 
+       pch = 21, # set shape (here, circle with a fill colour)
+       col = "black", # outline colour
+       bg = point_colors, # fill colour
+       cex = 1.2) # size
+
+# add points for species scores
+#points(sc_sp, 
+#       pch = 22, # set shape (here, square with a fill colour)
+#       col = "black",
+#       bg = "#D0B663", 
+#       cex = 1.2)
+
+# add text labels for species abbreviations
+text(sc_si + c(0.03, 0.09), # adjust text coordinates to avoid overlap with points 
+     labels = rownames(sc_si), 
+     col = "grey40", 
+     font = 2, # bold
+     cex = 0.6)
+
+# the predictors
+# add arrows for effects of the explanatory variables
+#arrows(0,0, # start them from (0,0)
+#       sc_bp[,1], sc_bp[,2], # end them at the score value
+#       col = "#33a02c", 
+#       lwd = 3)
+
+# add environmental predictors
+text(env_allBIOCLIM.rda, scaling=1, display="bp", col="#33a02c", cex=0.9)                           # the predictors
+
+
+# add text labels for arrows
+text(x = sc_bp[,1] +3, # adjust text coordinate to avoid overlap with arrow tip
+     y = sc_bp[,2] +3, 
+     labels = rownames(sc_bp), 
+     col = "#33a02c", 
+     cex = 0.7, 
+     font = 2)
+
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
 
 
 
