@@ -174,5 +174,119 @@ boxplot(Fis, main = "Inbreeding Coefficient",
 
 
 
+#### VCFTools Per Sample Calculations ####
+
+het_vcftools <- read.csv2("~/Documents/Jac/Population Genomics/Results/Mean Summary Stats/VCFTools/efulgens_not_LDpruned.het.het", header = TRUE, sep = "\t")
+
+#Encontrando heterozigosidade 
+#Numero de sites - Homozygous sites / Numero de sites
+#Column4 - Column2 / Column4
+
+het_vcftools$heterozygosity <- ((het_vcftools$N_SITES) - (het_vcftools$O.HOM.)) / (het_vcftools$N_SITES) 
+
+#Separando cada populacao em um dataframe 
+
+het_Itapua <- het_vcftools[1:10,]
+het_Torres <- het_vcftools[11:20,]
+het_Ubatuba <- het_vcftools[21:30,]
+het_Bertioga <- het_vcftools[31:40,]
+het_Cardoso <- het_vcftools[41:50,]
+het_Floripa <- het_vcftools[51:60,]
+het_Arambare <- het_vcftools[61:70,]
+het_Pelotas <- het_vcftools[71:80,]
+
+
+#Tirando a media dos valores para cada populacao - Obs Het; Exp Het; Fis
+
+#Transformando colunas em valores numericos
+str(het_Ubatuba)
+het_Ubatuba$heterozygosity <- as.numeric(het_Ubatuba$heterozygosity)
+het_Ubatuba$F <- as.numeric(het_Ubatuba$F)
+mean_values_Ubatuba <- het_Ubatuba %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Bertioga)
+het_Bertioga$heterozygosity <- as.numeric(het_Bertioga$heterozygosity)
+het_Bertioga$F <- as.numeric(het_Bertioga$F)
+mean_values_Bertioga <- het_Bertioga %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Cardoso)
+het_Cardoso$heterozygosity <- as.numeric(het_Cardoso$heterozygosity)
+het_Cardoso$F <- as.numeric(het_Cardoso$F)
+mean_values_Cardoso <- het_Cardoso %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Floripa)
+het_Floripa$heterozygosity <- as.numeric(het_Floripa$heterozygosity)
+het_Floripa$F <- as.numeric(het_Floripa$F)
+mean_values_Floripa <- het_Floripa %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Torres)
+het_Torres$heterozygosity <- as.numeric(het_Torres$heterozygosity)
+het_Torres$F <- as.numeric(het_Torres$F)
+mean_values_Torres <- het_Torres %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Arambare)
+het_Arambare$heterozygosity <- as.numeric(het_Arambare$heterozygosity)
+het_Arambare$F <- as.numeric(het_Arambare$F)
+mean_values_Arambare <- het_Arambare %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Pelotas)
+het_Pelotas$heterozygosity <- as.numeric(het_Pelotas$heterozygosity)
+het_Pelotas$F <- as.numeric(het_Pelotas$F)
+mean_values_Pelotas <- het_Pelotas %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+str(het_Itapua)
+het_Itapua$heterozygosity <- as.numeric(het_Itapua$heterozygosity)
+het_Itapua$F <- as.numeric(het_Itapua$F)
+mean_values_Itapua <- het_Itapua %>% summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+
+
+#Juntando tudo em um dataframe 
+
+mean_summary_stats_VCFTools <- rbind(mean_values_Ubatuba, mean_values_Bertioga, mean_values_Cardoso, mean_values_Floripa, mean_values_Torres, mean_values_Arambare, mean_values_Pelotas, mean_values_Itapua)
+row.names(mean_summary_stats_VCFTools) <- c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Arambare", "Pelotas", "Itapua")
+
+mean_summary_stats_VCFTools$O.HOM. <- NULL
+mean_summary_stats_VCFTools$N_SITES <- NULL
+
+colnames(mean_summary_stats_VCFTools) <- c("Fis", "Obs Heterozygosity")
+write.csv(mean_summary_stats_VCFTools, "~/Documents/Jac/Population Genomics/Results/Mean Summary Stats/VCFTools/mean_summary_stats_VCFTools.csv", row.names = TRUE)
+
+
+
+#### Creating boxplots for visualization ####
+
+#Heterozygosity
+heterozygosity_all_pops <- cbind(het_Ubatuba$heterozygosity, het_Bertioga$heterozygosity, het_Cardoso$heterozygosity, het_Floripa$heterozygosity, 
+                                 het_Torres$heterozygosity, het_Arambare$heterozygosity, het_Pelotas$heterozygosity, het_Itapua$heterozygosity)
+heterozygosity_all_pops <- as.data.frame(heterozygosity_all_pops)
+
+colnames(heterozygosity_all_pops) <- c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Arambare", "Pelotas", "Itapua")
+
+cbp2 <- c("#000000", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+boxplot(heterozygosity_all_pops, main = "Observed Heterozygosity", 
+        ylab = "Values", xlab = "Populations", 
+        col = cbp2)
+
+
+
+#Inbreeding coefficient
+Fis_all_pops <- cbind(het_Ubatuba$F , het_Bertioga$F, het_Cardoso$F, het_Floripa$F, 
+                      het_Torres$F, het_Arambare$F, het_Pelotas$F, het_Itapua$F)
+Fis_all_pops <- as.data.frame(Fis_all_pops)
+
+colnames(Fis_all_pops) <- c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Arambare", "Pelotas", "Itapua")
+
+boxplot(Fis_all_pops, main = "Inbreeding Coefficient", 
+        ylab = "Values", xlab = "Populations", 
+        col = cbp2)
+
+
+
+
+
+
+
 
 
