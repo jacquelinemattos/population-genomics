@@ -33,9 +33,10 @@ library(mapplots)
 
 #Load VCF file and sample info#
 
-vcf_file <- "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics_RNAseq/Final_VCF/PLINK_LD/vcf_pruned_by_plink.vcf"
+vcf_file <- "~/Documents/Jac/Population Genomics/VCF/vcf_pruned_by_plink.vcf"
 vcf <- read.vcfR(vcf_file, verbose = FALSE)
-sample_info <- read.csv("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics_RNAseq/Sample_info/trinity_efulgens_table.csv", header=TRUE)
+sample_info <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/populations_table_efulgens_POPMAP.csv", header=TRUE)
+pop_info <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/Samples_and_Populations-Habitats.csv", header=TRUE)
 
 
 #Analysis packages tend to convert files to their own formats so we will use can interpret easily.
@@ -96,11 +97,31 @@ cols <- colorRampPalette(brewer.pal(8, "Set1"))(17)
 
 #Colorblind-friendly color palette
 # The palette with black:
-cbp2 <- c("#000000", "#E69F00", "#56B4E9", "#009E73",
-          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+cbp2 <- c("#999933", "#E69F00", "#56B4E9", "#44AA99",
+          "#661100", "#332288", "#CC6677", "#CC79A7")
 
-plot12 <- plot12 + geom_point(aes(col = population)) + scale_colour_manual(values=cbp2) 
+install.packages("ggthemes")
+library(ggthemes)
+
+plot12 <- plot12 + 
+  geom_point(aes(col = population)) + 
+  scale_colour_manual(values=cbp2, name="Population") +
+  theme_clean() +
+  #stat_ellipse(aes(group = population), linetype = 2)
 plot12
+
+#Plotting everything all at once with ggplot2
+
+ggplot(vcf.pca.scores, aes(PC1, PC2))+
+  geom_point(aes(col= population))+
+  scale_color_manual(values=cbp2, name="Population")+
+  theme_clean()+
+  labs(x=xlabel, y=ylabel)+
+  stat_ellipse(aes(group = population), linetype = 2)
+  
+
+
+
 
 #Lets quickly look at PC3/PC4, and compare to the first plot.
 plot34 <- ggplot(vcf.pca.scores, aes(PC3, PC4)) + 
@@ -207,6 +228,262 @@ LEA::barchart(obj, K = 4, run = best, border = NA, space = 0, col = my.colors,
 axis(1, at = 1:length(bp_4$order), labels = bp_4$order, las=1, cex.axis = .6)
 
 
+
+
+#### Admixture plots for population structure visualization ####
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+### K = 3 ###
+
+# Set parameters
+K <- 3  # Specify the value of K
+Q_file <- paste0("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.", K, ".Q")  # File name with ancestral proportions
+
+# Load ADMIXTURE output
+Q_data <- read.table(Q_file, header = FALSE)
+
+# Rename columns to indicate ancestry proportions
+colnames(Q_data) <- paste0("Ancestry_", 1:K)
+
+# Add individual labels (e.g., 1, 2, 3...) if desired
+Q_data$Individual <- factor(1:nrow(Q_data))
+
+# Reshape the data for plotting
+Q_long <- Q_data %>%
+  pivot_longer(cols = starts_with("Ancestry_"), 
+               names_to = "Ancestry", 
+               values_to = "Proportion")
+
+
+# Plotting according to population 
+# Need to use either the .fam or the .ped files that we use as input for Admixture
+
+fam_file <- read.table("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.fam", header = FALSE)
+individual_ids <- fam_file$V2
+
+#combining the individual IDs from fam file with the results from Admixture in the .Q file 
+
+Q_data$Individual <- individual_ids
+
+#also combining the population of each individual in this file 
+#the file sample_file has the same order of individuals and populations as the order in the .Q file now after joining with the .fam file
+
+Q_data$Population <- sample_file$population
+colnames(Q_data) <- c("Ancestry_1", "Ancestry_2", "Ancestry_3", "Individual", "Population")
+
+
+#Changing the order of the populations on the dataframe so it will follow the gradient 
+Q_data$Population <- factor(Q_data$Population, levels = c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Itapua", "Arambare", "Pelotas"))
+Q_data_ordered <- Q_data %>% arrange(Population)
+
+
+# Explicitly set 'Individual' as a factor (this step helps ensure correct ordering and axis text behavior)
+Q_data_ordered$Individual <- factor(Q_data_ordered$Individual, levels = unique(Q_data_ordered$Individual))
+
+#Checking the levels of the factor columns (for the individual orders)
+levels(Q_data_ordered$Individual)
+
+#Reshaping the data again for plotting 
+Q_long <- Q_data_ordered %>% pivot_longer(cols = starts_with("Ancestry_"), names_to = "Ancestry", values_to = "Proportion")
+
+#Individual data are now as "levels" of a factor
+
+#colour palette
+install.packages("wesanderson")
+library(wesanderson)
+names(wes_palettes)
+wes_palettes
+
+
+# Plot the data
+ggplot(Q_long, aes(x = Individual, y = Proportion, fill = Ancestry)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Ancestry_1" = "#9986A5", "Ancestry_2" = "#ABDDDE", "Ancestry_3" = "#446455"))
+  labs(x = "Individual", y = "Ancestry Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        plot.margin = margin(t = 10, r = 10, b = 30, l = 10))
+
+
+
+
+### K = 3 ###
+
+# Set parameters
+K <- 3  # Specify the value of K
+Q_file <- paste0("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.", K, ".Q")  # File name with ancestral proportions
+
+# Load ADMIXTURE output
+Q_data <- read.table(Q_file, header = FALSE)
+
+# Rename columns to indicate ancestry proportions
+colnames(Q_data) <- paste0("Ancestry_", 1:K)
+
+# Add individual labels (e.g., 1, 2, 3...) if desired
+Q_data$Individual <- factor(1:nrow(Q_data))
+
+# Reshape the data for plotting
+Q_long <- Q_data %>%
+  pivot_longer(cols = starts_with("Ancestry_"), 
+               names_to = "Ancestry", 
+               values_to = "Proportion")
+
+
+# Plotting according to population 
+# Need to use either the .fam or the .ped files that we use as input for Admixture
+
+fam_file <- read.table("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.fam", header = FALSE)
+individual_ids <- fam_file$V2
+
+#combining the individual IDs from fam file with the results from Admixture in the .Q file 
+
+Q_data$Individual <- individual_ids
+
+#also combining the population of each individual in this file 
+#the file sample_file has the same order of individuals and populations as the order in the .Q file now after joining with the .fam file
+
+Q_data$Population <- sample_file$population
+colnames(Q_data) <- c("Ancestry_1", "Ancestry_2", "Ancestry_3", "Individual", "Population")
+
+
+#Changing the order of the populations on the dataframe so it will follow the gradient 
+Q_data$Population <- factor(Q_data$Population, levels = c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Itapua", "Arambare", "Pelotas"))
+Q_data_ordered <- Q_data %>% arrange(Population)
+
+
+# Explicitly set 'Individual' as a factor (this step helps ensure correct ordering and axis text behavior)
+Q_data_ordered$Individual <- factor(Q_data_ordered$Individual, levels = unique(Q_data_ordered$Individual))
+
+#Checking the levels of the factor columns (for the individual orders)
+levels(Q_data_ordered$Individual)
+
+#Reshaping the data again for plotting 
+Q_long <- Q_data_ordered %>% pivot_longer(cols = starts_with("Ancestry_"), names_to = "Ancestry", values_to = "Proportion")
+
+#Individual data are now as "levels" of a factor
+
+#colour palette
+install.packages("wesanderson")
+library(wesanderson)
+names(wes_palettes)
+wes_palettes
+
+
+# Plot the data
+ggplot(Q_long, aes(x = Population, y = Proportion, fill = Ancestry)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Ancestry_1" = "#9986A5", "Ancestry_2" = "#ABDDDE", "Ancestry_3" = "#446455"))
+  labs(x = "Individual", y = "Ancestry Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        plot.margin = margin(t = 10, r = 10, b = 30, l = 10))
+  
+
+
+### K = 2 ###
+  
+# Set parameters
+K <- 2  # Specify the value of K
+Q_file <- paste0("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.", K, ".Q")  # File name with ancestral proportions
+  
+# Load ADMIXTURE output
+Q_data_2 <- read.table("Q_file", header = FALSE)
+  
+# Rename columns to indicate ancestry proportions
+colnames(Q_data_2) <- paste0("Ancestry_", 1:K)
+  
+# Plotting according to population 
+# Need to use either the .fam or the .ped files that we use as input for Admixture
+
+fam_file <- read.table("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.fam", header = FALSE)
+individual_ids <- fam_file$V2
+
+#combining the individual IDs from fam file with the results from Admixture in the .Q file 
+
+Q_data_2$Individual <- individual_ids
+  
+#also combining the population of each individual in this file 
+#the file sample_file has the same order of individuals and populations as the order in the .Q file now after joining with the .fam file
+
+Q_data_2$Population <- sample_file$population
+colnames(Q_data_2) <- c("Ancestry_1", "Ancestry_2", "Individual", "Population")
+
+
+#Changing the order of the populations on the dataframe so it will follow the gradient 
+Q_data_2$Population <- factor(Q_data_2$Population, levels = c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Itapua", "Arambare", "Pelotas"))
+Q_data_2_ordered <- Q_data_2 %>% arrange(Population)
+
+
+# Explicitly set 'Individual' as a factor (this step helps ensure correct ordering and axis text behavior)
+Q_data_2_ordered$Individual <- factor(Q_data_2_ordered$Individual, levels = unique(Q_data_2_ordered$Individual))
+
+#Reshaping the data again for plotting 
+Q_long_2 <- Q_data_2_ordered %>% pivot_longer(cols = starts_with("Ancestry_"), names_to = "Ancestry", values_to = "Proportion")
+
+
+# Plot the data
+ggplot(Q_long_2, aes(x = Individual, y = Proportion, fill = Ancestry)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Ancestry_1" = "#9986A5", "Ancestry_2" = "#446455"))
+labs(x = "Individual", y = "Ancestry Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        plot.margin = margin(t = 10, r = 10, b = 30, l = 10))
+
+
+### K = 4 ###
+
+# Set parameters
+K <- 4  # Specify the value of K
+#Q_file <- paste0("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.", K, ".Q")  # File name with ancestral proportions
+
+# Load ADMIXTURE output
+Q_data_4 <- read.table("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.4.Q", header = FALSE)
+
+# Rename columns to indicate ancestry proportions
+colnames(Q_data_4) <- paste0("Ancestry_", 1:K)
+
+# Plotting according to population 
+# Need to use either the .fam or the .ped files that we use as input for Admixture
+
+fam_file <- read.table("~/Documents/Jac/Population Genomics/Results/Admixture/pruneddata.fam", header = FALSE)
+individual_ids <- fam_file$V2
+
+#combining the individual IDs from fam file with the results from Admixture in the .Q file 
+
+Q_data_4$Individual <- individual_ids
+
+#also combining the population of each individual in this file 
+#the file sample_file has the same order of individuals and populations as the order in the .Q file now after joining with the .fam file
+
+Q_data_4$Population <- sample_file$population
+colnames(Q_data_4) <- c("Ancestry_1", "Ancestry_2", "Ancestry_3", "Ancestry_4", "Individual", "Population")
+
+
+#Changing the order of the populations on the dataframe so it will follow the gradient 
+Q_data_4$Population <- factor(Q_data_4$Population, levels = c("Ubatuba", "Bertioga", "Cardoso", "Florianopolis", "Torres", "Itapua", "Arambare", "Pelotas"))
+Q_data_4_ordered <- Q_data_4 %>% arrange(Population)
+
+
+# Explicitly set 'Individual' as a factor (this step helps ensure correct ordering and axis text behavior)
+Q_data_4_ordered$Individual <- factor(Q_data_4_ordered$Individual, levels = unique(Q_data_4_ordered$Individual))
+
+#Reshaping the data again for plotting 
+Q_long_4 <- Q_data_4_ordered %>% pivot_longer(cols = starts_with("Ancestry_"), names_to = "Ancestry", values_to = "Proportion")
+
+
+# Plot the data
+ggplot(Q_long_4, aes(x = Population, y = Proportion, fill = Ancestry)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Ancestry_1" = "#9986A5", "Ancestry_2" = "#446455", "Ancestry_3" = "#ABDDDE", "Ancestry_4" = "#446499"))
+labs(x = "Individual", y = "Ancestry Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), 
+        plot.margin = margin(t = 10, r = 10, b = 30, l = 10))
 
 
 
@@ -320,7 +597,7 @@ ggplot(data = Fst_chromosomes, aes(x = midPos / 1000000, y = WEIGHTED_FST, col =
 #----------------------------------------------------#
 
 
-#### Basic Population Genetic Statistics from SNPS data ####
+#### Basic Population Genetic Statistics from SNPs data ####
 
 # Here we'll calculate 
 # 1. Genetic Diversity 
@@ -334,7 +611,7 @@ library("hierfstat")
 library("pegas")
 library("vcfR")
 
-# Creating a GenIND object and onverting to a hierfstat object 
+# Creating a GenIND object and converting to a hierfstat object 
 
 
 #loading vcf file with vcfR package
@@ -475,8 +752,6 @@ tajima.chr1 <- subset(tajimas, CHROM == "scaffold_1")
 plot(tajima.chr1$BIN_START,tajima.chr1$TajimaD, xlab="Position", ylab="Tajima's D")
 
 
-
-
 #----------------------------------------------------#
 
 
@@ -545,7 +820,7 @@ makeSymm <- function(m, position) {
 
 # load the FST matrix for all SNPs
 #C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Fst/StAMPP
-fst.mat <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Fst/StAMPP/efulgens_fst_matrix.txt")
+fst.mat <- read.table("~/Documents/Jac/Population Genomics/Tabelas/StAMPP/efulgens_fst_matrix.txt")
 
 # use the given function to fill the upper diagonal of the matrix
 fst.all.mat <- fst.mat %>%
@@ -558,9 +833,12 @@ fst.all.mat[1:5, 1:5] # check the fst_matrix
 # visualise values
 corrplot(fst.all.mat, is.corr = FALSE, method = "number", addgrid.col = FALSE, diag = FALSE, type = "lower", number.digits = 3, number.cex = 0.7)
 
+
 # visualize pairwise FST with a heatmap plot
 gplots::heatmap.2(fst.all.mat, trace = "none",
-                  col = colorRampPalette(brewer.pal(9, "Reds"))(15),
+                  #col = colorRampPalette(brewer.pal(9, "Reds"))(15),
+                  #col = colorRampPalette(brewer.pal(9, "Greens")),
+                  col = colorRampPalette(brewer.pal(9, "PuBuGn")),
                   key.xlab = "FST")
 
 
@@ -582,10 +860,10 @@ library(ggplot2)
 library(geosphere)
 
 # import information about populations
-pop_coord <- read.csv("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Coordinates_Pops.csv", header=TRUE) 
+pop_coord <- read.csv("~/Documents/Jac/Population Genomics/Tabelas/Coordinates_Pops.csv", header=TRUE) 
 head(pop_coord)
 
-pop_info <- read.csv2("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Samples_and_Populations-Habitats.csv", header=TRUE) 
+pop_info <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/Samples_and_Populations-Habitats.csv", header=TRUE) 
 pop <- as.character(pop_info$population)
 
 
@@ -624,9 +902,181 @@ cor.test(log(IBD.df$distance), IBD.df$FST / (1 - IBD.df$FST))
 
 # plot IBD
 ggplot(IBD.df) + aes(x = log(distance), y = FST / (1 - FST)) +
-  geom_point() +
-  geom_smooth(method = "lm", formula = y~x) +
-  theme_bw()
+  geom_point(color="black", shape=18) +
+  geom_smooth(method = "lm", formula = y~x, color="#56B4E9") +
+  theme_light() +
+  labs(
+    x="Distance (log)",
+    y="Fst/(1-Fst)",
+    title="Correlation: Isolation by Distance"
+  ) 
+
+
+
+
+
+#----------------------------------------------------#
+
+#### Isolation by Environment (IBE) Analysis with Mantel Test ####
+
+library(vegan)
+library(geosphere)
+
+
+# import information about populations
+pop_coord <- read.csv("~/Documents/Jac/Population Genomics/Tabelas/Coordinates_Pops.csv", header=TRUE) 
+head(pop_coord)
+
+pop_info <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/Samples_and_Populations-Habitats.csv", header=TRUE) 
+pop <- as.character(pop_info$population)
+
+
+## Genetic distances ## 
+#These will be from the Fst matrix from previous section
+gen_dist <- fst.all.mat
+
+
+## Geographic distances ##
+# calculate geographic (euclidian) distances between all pairs of populations
+distance <- geosphere::distm(pop_coord[, c(3, 4)], fun = distGeo) %>%
+  as.matrix(.)
+
+# change it from meters to km
+distance <- distance / 1000
+
+# set the colnames and rownames of the distance matrix
+dimnames(distance) <- list(pop_info$population, pop_info$population)
+distance
+
+geo_dist <- distance
+
+## Environmental distances ##
+pops_allBIOCLIM <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/only_pops_data_ALL_BIOCLIM.csv", header = TRUE, sep=",")
+str(pops_allBIOCLIM)
+
+# selection of environmental predictors based on VIF:
+bioclim <- pops_allBIOCLIM[, 4:22]
+
+#predictors <- all_bioclim %>% select(bio1, bio2, bio8, bio14)
+predictors_mantel <- pops_allBIOCLIM[, c("bio1", "bio2", "bio8", "bio14")]
+
+
+# Convert factor or character columns to numeric if necessary
+predictors_mantel[] <- lapply(predictors_mantel, function(x) {
+  if(is.factor(x) || is.character(x)) {
+    return(as.numeric(as.character(x)))  # Convert factors/characters to numeric
+  } else {
+    return(x)
+  }
+})
+#scale the variables so they are all comparable
+env_bioclim_scale <- scale(predictors_mantel)
+
+# Calculate the environmental distance matrix using Euclidean distance
+env_dist <- dist(env_bioclim_scale, method = "euclidean")
+print(as.matrix(env_dist))
+env_dist <- as.matrix(env_dist)
+
+
+## Perform the partial Mantel test ## 
+partial_mantel_result <- mantel.partial(gen_dist, env_dist, geo_dist, method = "pearson", permutations = 999)
+print(partial_mantel_result)
+
+#Mantel’s r (partial): This is the correlation between genetic distance and environmental distance, controlling for geographic distance.
+#p-value: Indicates whether the correlation is statistically significant.
+
+
+# Plotting the Mantel Test:)
+
+# Convert distance matrices to vectors
+genetic_vector <- as.vector(gen_dist)  # Flatten the genetic distance matrix
+environmental_vector <- as.vector(env_dist)  # Flatten the environmental distance matrix
+
+# Check if both vectors have the same length
+length(genetic_vector) == length(environmental_vector)
+
+
+# Scatter plot of genetic vs. environmental distances
+plot(genetic_vector, environmental_vector, 
+     xlab = "Genetic Distance", 
+     ylab = "Environmental Distance", 
+     main = "Mantel Test: Genetic vs. Environmental Distances", 
+     pch = 19, col = "#927BC9")
+
+# Optionally, add a regression line to visualize the trend
+abline(lm(environmental_vector ~ genetic_vector), col = "#56B4E9")
+
+
+#Plotting with ggplot
+#Need to transform the data into a dataframe in order to use geom_point() for the scatterplot.
+
+data_mantel_ggplot <- data.frame(
+  Genetic_Distance = genetic_vector,
+  Environmental_Distance = environmental_vector
+)
+
+ggplot(data_mantel_ggplot, aes(x= Genetic_Distance, y= Environmental_Distance)) +
+  geom_point(color="black", shape=18)+
+  geom_smooth(method = "lm", formula = y~x, color="#56B4E9") +
+  labs(
+    x="Genetic Distance",
+    y="Environmental Distance",
+    title="Mantel Test: Isolation by Environment"
+  ) +
+  theme_light()
+
+
+
+# Add Mantel result as text on the plot
+mantel_r <- round(partial_mantel_result$statistic, 3)
+mantel_p <- round(partial_mantel_result$signif, 3)
+
+text(x = max(genetic_vector), y = min(environmental_vector), 
+     labels = paste("r =", mantel_r, "\np =", mantel_p), 
+     pos = 4, col = "#784")
+
+
+
+## Plotting a Partial Mantel Test
+
+# Convert distance matrices to vectors
+genetic_vector <- as.vector(gen_dist)
+environmental_vector <- as.vector(env_dist)
+geographic_vector <- as.vector(geo_dist)
+
+# Use linear models to extract residuals
+# Fit linear model: environmental ~ geographic
+env_geo_lm <- lm(environmental_vector ~ geographic_vector)
+
+# Get the residuals from the environmental vs. geographic model
+env_residuals <- resid(env_geo_lm)
+
+# Now fit genetic ~ geographic to control for geographic distance
+gen_geo_lm <- lm(genetic_vector ~ geographic_vector)
+
+# Get the residuals from the genetic vs. geographic model
+gen_residuals <- resid(gen_geo_lm)
+
+# Now, you can plot the residuals (genetic residuals vs. environmental residuals)
+plot(gen_residuals, env_residuals, 
+     xlab = "Genetic Distance Residuals", 
+     ylab = "Environmental Distance Residuals", 
+     main = "Partial Mantel Test: Residuals Plot", 
+     pch = 19, col = "#927BC9")
+
+# Add a regression line
+abline(lm(env_residuals ~ gen_residuals), col = "#56B4E9")
+
+# Extract Mantel's r and p-value
+mantel_r <- round(partial_mantel_result$statistic, 3)  # Mantel's r value
+mantel_p <- round(partial_mantel_result$signif, 3)     # p-value
+
+# Add text to the plot
+text(x = max(gen_residuals), y = min(env_residuals), 
+     labels = paste("r =", mantel_r, "\np =", mantel_p), 
+     pos = 4, col = "black")
+
+
 
 
 #-----------------------------------------------------#
@@ -774,6 +1224,8 @@ xtx_pos[xtx_pos$M_XtX >= threshold_fdr0.05, ]
 
 #### Genotype-Environment Association Analyses - With RDA (Redundancy Analysis)####
 
+install.packages("LEA")
+
 library(vegan)    # Used to run PCA & RDA
 library(lfmm)     # Used to run LFMM
 library(LEA)
@@ -781,7 +1233,7 @@ library(vcfR)
 library(ggplot2)
 
 # use the library vcfR to convert the VCF into the OutFLANK format
-vcf_file <- "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Final_VCF/PLINK_LD/vcf_pruned_by_plink.vcf"
+vcf_file <- "~/Documents/Jac/Population Genomics/Tabelas/vcf_pruned_by_plink.vcf"
 obj.vcfR <- read.vcfR(vcf_file, verbose = FALSE)
 
 
@@ -848,7 +1300,7 @@ str(gen.imp)
 install.packages("psych")
 library(psych)
 
-env <- read.csv2("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Environmental_Data/pop_ind_lat_long_env_data_important_env_variables.csv", header = TRUE)
+env <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/pop_ind_lat_long_env_data_important_env_variables.csv", header = TRUE)
 head(env)
 
 # Make individual names characters (not factors)
@@ -1038,46 +1490,6 @@ text(x = sc_bp[,1] +3, # adjust text coordinate to avoid overlap with arrow tip
 legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
 
 
-
-
-#______________________________________________________#
-
-
-#### Identifying candidate SNPs for local adaptation ####
-
-#We’ll use the loadings of the SNPs in the ordination space to determine which SNPs are candidates for local adaptation. The SNP loadings are stored as species in the RDA object. We’ll extract the SNP loadings from the three significant constrained axes
-
-load.rda <- scores(env.rda, choices=c(1:3), display="species")  # Species scores for the first three constrained axes
-
-#If we look at histograms of the loadings on each RDA axis, we can see their (relatively normal) distributions. SNPs loading at the center of the distribution are not showing a relationship with the environmental predictors; those loading in the tails are, and are more likely to be under selection as a function of those predictors (or some other predictor correlated with them).
-
-hist(load.rda[,1], main="Loadings on RDA1")
-hist(load.rda[,2], main="Loadings on RDA2")
-hist(load.rda[,3], main="Loadings on RDA3") 
-
-
-#I’ve written a simple function to identify SNPs that load in the tails of these distributions. We’ll start with a 3 standard deviation cutoff (two-tailed p-value = 0.0027). As with all cutoffs, this can be modified to reflect the goals of the analysis and our tolerance for true positives vs. false positives. For example, if you needed to be very conservative and only identify those loci under very strong selection (i.e., minimize false positive rates), you could increase the number of standard deviations to 3.5 (two-tailed p-value = 0.0005). This would also increase the false negative rate. If you were less concerned with false positives, and more concerned with identifying as many potential candidate loci as possible (including those that may be under weaker selection), you might choose a 2.5 standard deviation cutoff (two-tailed p-value = 0.012).
-
-#I define the function here as outliers, where x is the vector of loadings and z is the number of standard deviations to use
-
-outliers <- function(x,z){
-  lims <- mean(x) + c(-1, 1) * z * sd(x)     # find loadings +/-z sd from mean loading     
-  x[x < lims[1] | x > lims[2]]               # locus names in these tails
-}
-
-
-#Now let’s apply it to each significant constrained axis
-
-cand1 <- outliers(load.rda[,1],3) # 3
-cand2 <- outliers(load.rda[,2],3) # 290
-cand3 <- outliers(load.rda[,3],3) # 154
-
-ncand <- length(cand1) + length(cand2) + length(cand3)
-ncand # 447 candidate SNPs for local adaptation
-
-
-
-
 #______________________________________________________#
 
 #### RDA with PC scores from environmental PCAs ####
@@ -1152,10 +1564,35 @@ sc_bp_PCs <- scores(env.rda_PCs, display="bp", choices=c(1, 2), scaling=1)
 
 #BIOCLIM <- read.csv("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Environmental_Variables/extracted_ALL_BIOCLIM_10min.csv", header = TRUE)
 
-env_allBIOCLIM <- read.csv2("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Samples_Info/Environmental_Data/pop_ind_lat_long_env_data_ALL_BIOCLIM.csv", header = TRUE)
+env_allBIOCLIM <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/pop_ind_lat_long_env_data_ALL_BIOCLIM.csv", header = TRUE)
 
 all_bioclim <- env_allBIOCLIM[,5:23]
-all_bioclim$bio1
+str(all_bioclim)
+
+#investigating the environmental variables 
+library(psych)    # Used to investigate correlations among predictors
+
+#acommodating the window size
+x11()
+pairs.panels(all_bioclim, scale=T)
+
+#RDA is a regression-based method, and so can be subject to problems when using highly correlated predictors (Dormann et al., 2013). 
+#Generally, the |r| > 0.7 “rule of thumb” is a good guideline for removing correlated predictors. 
+#We will also check for multicollinearity using Variance Inflation Factors (VIF), below.
+#Variable reduction should be guided by an ecological interpretation of the relevance of possible predictors. 
+#Here, we use the function pairs.panels to visualize correlations among our predictors. 
+#Correlation coefficients are in the upper right diagonal, with their size scaled to their |r|. The lower left shows scatter plots, while the diagonal shows histograms of the data. See ?pairs.panels for more information.
+
+
+#baseando no pairs.panels, escolhi sete variaveis que eram menos correlacionadas com todas as outras (R>0.7)
+
+pred <- subset(all_bioclim, select=c(bio2, bio5, bio7, bio9, bio14, bio17, bio18))
+pred
+
+#conferindo a correlacao dessas variaveis que escolhi usando o pairs.panels de novo
+
+pairs.panels(pred, scale=T)
+
 
 # load package
 library(vegan)
@@ -1164,36 +1601,39 @@ library(vegan)
 env_allBIOCLIM.rda <- vegan::rda(gen.imp ~ ., data=all_bioclim, scale = TRUE)
 env_allBIOCLIM.rda
 
+env_pred.rda <- vegan::rda(gen.imp ~ ., data=pred, scale = TRUE)
+
+
 #Looking at the fraction of variance explained by the 1st axis of the RDA
-RsquareAdj(env_allBIOCLIM.rda)
+RsquareAdj(env_pred.rda)
 
 #$adj.r.squared
-#[1] 0.09908134
+#[1] 0.1374833
 
-#Our constrained ordination explains very little about the variation (9%); this low explanatory power is not surprising given that we expect that most of the SNPs in our dataset will not show a relationship with the environmental predictors (e.g., most SNPs will be neutral).
+#Our constrained ordination explains very little about the variation (13%); this low explanatory power is not surprising given that we expect that most of the SNPs in our dataset will not show a relationship with the environmental predictors (e.g., most SNPs will be neutral).
 
 #The eigenvalues for the constrained axes reflect the variance explained by each canonical axis:
 
-summary(eigenvals(env_allBIOCLIM.rda, model = "constrained"))
-screeplot(env_allBIOCLIM.rda)
+summary(eigenvals(env_pred.rda, model = "constrained"))
+screeplot(env_pred.rda)
 
 
 #Test the significance of the model using permutation tests.
 #Now let’s check our RDA model for significance using formal tests. We can assess both the full model and each constrained axis using F-statistics (Legendre et al, 2010). The null hypothesis is that no linear relationship exists between the SNP data and the environmental predictors. See ?anova.cca for more details and options.
 
-env.signif.full <- anova.cca(env_allBIOCLIM.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+env.signif.full <- anova.cca(env_pred.rda, parallel = getOption("mc.cores")) # default is permutation = 999
 env.signif.full
 
 #Analyse the RDA output
 #We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
 
 ## extract % explained by the first 2 axes
-perc <- round(100*(summary(env_allBIOCLIM.rda)$cont$importance[2, 1:2]), 2)
+perc <- round(100*(summary(env_pred.rda)$cont$importance[2, 1:2]), 2)
 perc
 
 #associating populations with colors
 
-populations <- env$population
+populations <- env_allBIOCLIM$population
 pop_colors <- c("Ubatuba" = "#CC79A7", "Bertioga" = "darkolivegreen2", "Cardoso" = "#927BC9", "Floripa" = "#F0E442", "Torres" = "#009E73", "Itapua" = "#56B4E9", "Arambare" = "#E69F00", "Pelotas" = "#000000")
 
 #Map the population labels to their corresponding colors
@@ -1201,10 +1641,10 @@ point_colors <- pop_colors[populations]
 point_colors
 
 
-plot(env_allBIOCLIM.rda, type="n", scaling = 3, xlab = paste0("RDA1 (", perc[1], "%)"), ylab = paste0("RDA2 (", perc[2], "%)") ) 
-points(env_allBIOCLIM.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
-points(env_allBIOCLIM.rda, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3)   # the individuals
-text(env_allBIOCLIM.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
+plot(env_pred.rda, type="n", scaling = 3, xlab = paste0("RDA1 (", perc[1], "%)"), ylab = paste0("RDA2 (", perc[2], "%)") ) 
+points(env_pred.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
+points(env_pred.rda, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3)   # the individuals
+text(env_pred.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
 legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
 
 
@@ -1224,7 +1664,219 @@ sc_bp <- scores(env_allBIOCLIM.rda, display="bp", choices=c(1, 2), scaling=1)
 perc <- round(100*(summary(env_allBIOCLIM.rda)$cont$importance[2, 1:2]), 2)
 perc
 
-#### Custom RDA triplot, step by step ####
+## Custom RDA triplot, step by step ##
+
+# Set up a blank plot with scaling, axes, and labels
+plot(env_allBIOCLIM.rda,
+     scaling = 1, # set scaling type 
+     type = "none", # this excludes the plotting of any points from the results
+     frame = FALSE,
+     # set axis limits
+     xlim = c(-4,4), 
+     ylim = c(-4,4),
+     # label the plot (title, and axes)
+     main = "Triplot RDA - scaling 1",
+     xlab = paste0("RDA1 (", perc[1], "%)"), 
+     ylab = paste0("RDA2 (", perc[2], "%)") 
+)
+# add points for site scores
+points(sc_si, 
+       pch = 21, # set shape (here, circle with a fill colour)
+       col = "black", # outline colour
+       bg = point_colors, # fill colour
+       cex = 1.2) # size
+
+# add points for species scores
+#points(sc_sp, 
+#       pch = 22, # set shape (here, square with a fill colour)
+#       col = "black",
+#       bg = "#D0B663", 
+#       cex = 1.2)
+
+# add text labels for species abbreviations
+text(sc_si + c(0.03, 0.09), # adjust text coordinates to avoid overlap with points 
+     labels = rownames(sc_si), 
+     col = "grey40", 
+     font = 2, # bold
+     cex = 0.6)
+
+# the predictors
+# add arrows for effects of the explanatory variables
+#arrows(0,0, # start them from (0,0)
+#       sc_bp[,1], sc_bp[,2], # end them at the score value
+#       col = "#33a02c", 
+#       lwd = 3)
+
+# add environmental predictors
+text(env_allBIOCLIM.rda, scaling=1, display="bp", col="#33a02c", cex=0.9)                           # the predictors
+
+
+# add text labels for arrows
+text(x = sc_bp[,1] +3, # adjust text coordinate to avoid overlap with arrow tip
+     y = sc_bp[,2] +3, 
+     labels = rownames(sc_bp), 
+     col = "#33a02c", 
+     cex = 0.7, 
+     font = 2)
+
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
+
+
+#______________________________________________________#
+
+#### RDA for final set of predictors based on VIF ####
+
+# load package
+library(vegan)
+library(dplyr)
+
+env_allBIOCLIM <- read.csv2("~/Documents/Jac/Population Genomics/Tabelas/pop_ind_lat_long_env_data_ALL_BIOCLIM.csv", header = TRUE)
+
+all_bioclim <- env_allBIOCLIM[,5:23]
+str(all_bioclim)
+
+# selection of environmental predictors based on VIF:
+bioclim <- env_allBIOCLIM[, 5:23]
+bioclim <- as.matrix(bioclim)
+
+corr <- vifcor(bioclim, th=0.7)
+#kept bio1, bio2, bio8 and bio14
+
+#predictors <- all_bioclim %>% select(bio1, bio2, bio8, bio14)
+predictors <- all_bioclim[, c("bio1", "bio2", "bio8", "bio14")]
+
+
+# run rda
+predictors.rda <- vegan::rda(gen.imp ~ ., data=predictors, scale = TRUE)
+predictors.rda 
+
+
+#Looking at the fraction of variance explained by the 1st axis of the RDA
+RsquareAdj(predictors.rda)
+
+#$adj.r.squared
+#[1] 0.1065415
+
+#Our constrained ordination explains very little about the variation (13%); this low explanatory power is not surprising given that we expect that most of the SNPs in our dataset will not show a relationship with the environmental predictors (e.g., most SNPs will be neutral).
+
+#The eigenvalues for the constrained axes reflect the variance explained by each canonical axis:
+
+summary(eigenvals(predictors.rda, model = "constrained"))
+screeplot(predictors.rda)
+
+
+#Test the significance of the model using permutation tests.
+#Now let’s check our RDA model for significance using formal tests. We can assess both the full model and each constrained axis using F-statistics (Legendre et al, 2010). The null hypothesis is that no linear relationship exists between the SNP data and the environmental predictors. See ?anova.cca for more details and options.
+
+env.signif.full <- anova.cca(predictors.rda, parallel = getOption("mc.cores")) # default is permutation = 999
+env.signif.full
+
+#Analyse the RDA output
+#We can plot the RDA. We’ll start with simple triplots from vegan. Here we’ll use scaling=3 (also known as “symmetrical scaling”) for the ordination plots. This scales the SNP and individual scores by the square root of the eigenvalues so that we can easily visualize them in the sample plot. Here, the SNPs are in red (in the center of each plot), and the individuals are colour-coded by population. The blue vectors are the environmental predictors. The relative arrangement of these items in the ordination space reflects their relationship with the ordination axes, which are linear combinations of the predictor variables.
+
+## extract % explained by the first 2 axes
+perc <- round(100*(summary(predictors.rda)$cont$importance[2, 1:2]), 2)
+perc
+
+perc_3_4 <- round(100*(summary(predictors.rda)$cont$importance[2, 3:4]), 2)
+perc_3_4
+
+
+#associating populations with colors
+
+populations <- env_allBIOCLIM$population
+pop_colors <- c("Ubatuba" = "#CC79A7", "Bertioga" = "darkolivegreen2", "Cardoso" = "#927BC9", "Florianopolis" = "#F0E442", "Torres" = "#009E73", "Itapua" = "#56B4E9", "Arambare" = "#E69F00", "Pelotas" = "#000000")
+
+#Map the population labels to their corresponding colors
+point_colors <- pop_colors[populations]
+point_colors
+
+#plotting RDA1 and RDA2
+
+plot(predictors.rda, type="n", scaling = 3, xlab = paste0("RDA1 (", perc[1], "%)"), ylab = paste0("RDA2 (", perc[2], "%)") ) 
+points(predictors.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3)  # the SNPs
+points(predictors.rda, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3)   # the individuals
+text(predictors.rda, scaling=3, display="bp", col="#0868ac", cex=0.9)                           # the predictors
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
+
+
+#plotting RDA3 and RDA4 to check collinearity among predictors 
+plot(predictors.rda, type="n", choices= c(3,4), scaling = 3, xlab = paste0("RDA3 (", perc_3_4[1], "%)"), ylab = paste0("RDA4 (", perc_3_4[2], "%)") ) 
+points(predictors.rda, display="species", pch=20, cex=0.7, col="gray32", scaling=3, choices= c(3,4))  # the SNPs
+points(predictors.rda, display = "sites", pch = 20, cex = 1.7, col=point_colors, scaling = 3, choices= c(3,4))   # the individuals
+text(predictors.rda, scaling=3, display="bp", col="#0868ac", cex=0.9, choices= c(3,4))                           # the predictors
+legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch = 21, cex = 0.9, pt.bg = pop_colors[unique(populations)])
+
+
+#plotting with ggplot2
+#first we need to extract the values of the scores of the rda (species, sites and predictors)
+species_scores <- as.data.frame(scores(predictors.rda, display = "species", scaling = 3))
+sites_scores <- as.data.frame(scores(predictors.rda, display = "sites", scaling = 3))
+predictors_scores <- as.data.frame(scores(predictors.rda, display = "bp", scaling = 3))
+
+# Add relevant columns
+species_scores$type <- "species"
+sites_scores$type <- "sites"
+sites_scores$population <- populations
+sites_scores$point_color <- point_colors
+predictors_scores$type <- "predictors"
+
+# Scale explained variance for axes labels
+xlab <- paste0("RDA1 (", perc[1], "%)")
+ylab <- paste0("RDA2 (", perc[2], "%)")
+
+#Re-scaling the predictor values so the arrows don't look too small on the RDA plot
+#We multiply the RDA1 and RDA2 values for predictors by a scaling factor (e.g., arrow_scale). Adjust this factor to balance arrow size.
+
+arrow_scale <- 8
+
+predictors_scores$RDA1 <- predictors_scores$RDA1 * arrow_scale
+predictors_scores$RDA2 <- predictors_scores$RDA2 * arrow_scale
+
+
+ggplot() +
+  # Add SNP points (species)
+  geom_point(data = species_scores, aes(x = RDA1, y = RDA2), 
+             color = "gray32", size = 0.7) +
+  # Add individual points (sites)
+  geom_point(data = sites_scores, aes(x = RDA1, y = RDA2, fill = point_color), 
+             shape = 21, size = 1.7) +
+  # Add predictors (arrows)
+  geom_segment(data = predictors_scores, 
+               aes(x = 0, y = 0, xend = RDA1, yend = RDA2), 
+               arrow = arrow(length = unit(0.2, "cm")), 
+               color = "black") +
+  geom_text(data = predictors_scores, 
+            aes(x = RDA1, y = RDA2, label = rownames(predictors_scores)), 
+            color = "black", size = 4) +
+  # Customize the legend
+  scale_fill_identity(guide = "legend", 
+                      labels = unique(populations), 
+                      breaks = unique(point_colors)) +
+  theme_light() +
+  labs(x = xlab, y = ylab, fill = "Population") +
+  theme(legend.position = "top")
+
+
+
+
+#simple plots
+plot(env_allBIOCLIM.rda, type="n", scaling = 3)
+points(env_allBIOCLIM.rda, display = "sites", pch = 20, cex = 1.3, col = point_colors, scaling = 3)
+ordiplot(env_allBIOCLIM.rda, scaling = 1, type = "text")
+
+
+#custom triplot, step by step
+## extract scores - these are coordinates in the RDA space
+sc_si <- scores(env_allBIOCLIM.rda, display="sites", choices=c(1,2), scaling=1)
+sc_sp <- scores(env_allBIOCLIM.rda, display="species", choices=c(1,2), scaling=1)
+sc_bp <- scores(env_allBIOCLIM.rda, display="bp", choices=c(1, 2), scaling=1)
+
+## extract % explained by the first 2 axes
+perc <- round(100*(summary(env_allBIOCLIM.rda)$cont$importance[2, 1:2]), 2)
+perc
+
+## Custom RDA triplot, step by step ##
 
 # Set up a blank plot with scaling, axes, and labels
 plot(env_allBIOCLIM.rda,
@@ -1287,6 +1939,189 @@ legend("topleft", legend = unique(populations), bty = "n", col = "gray32", pch =
 
 
 
+#______________________________________________________#
+
+
+#### Identifying candidate SNPs for local adaptation ####
+##Proceeding using the RDA with the three environmental predictors selected on the niche modelling chapter##
+
+
+#We’ll use the loadings of the SNPs in the ordination space to determine which SNPs are candidates for local adaptation. The SNP loadings are stored as species in the RDA object. We’ll extract the SNP loadings from the three significant constrained axes
+
+load.rda <- scores(predictors.rda, choices=c(1:3), display="species")  # Species scores for the first three constrained axes
+
+#If we look at histograms of the loadings on each RDA axis, we can see their (relatively normal) distributions. SNPs loading at the center of the distribution are not showing a relationship with the environmental predictors; those loading in the tails are, and are more likely to be under selection as a function of those predictors (or some other predictor correlated with them).
+
+hist(load.rda[,1], main="Loadings on RDA1")
+hist(load.rda[,2], main="Loadings on RDA2")
+hist(load.rda[,3], main="Loadings on RDA3") 
+
+
+#I’ve written a simple function to identify SNPs that load in the tails of these distributions. We’ll start with a 3 standard deviation cutoff (two-tailed p-value = 0.0027). As with all cutoffs, this can be modified to reflect the goals of the analysis and our tolerance for true positives vs. false positives. For example, if you needed to be very conservative and only identify those loci under very strong selection (i.e., minimize false positive rates), you could increase the number of standard deviations to 3.5 (two-tailed p-value = 0.0005). This would also increase the false negative rate. If you were less concerned with false positives, and more concerned with identifying as many potential candidate loci as possible (including those that may be under weaker selection), you might choose a 2.5 standard deviation cutoff (two-tailed p-value = 0.012).
+
+#I define the function here as outliers, where x is the vector of loadings and z is the number of standard deviations to use
+
+outliers <- function(x,z){
+  lims <- mean(x) + c(-1, 1) * z * sd(x)     # find loadings +/-z sd from mean loading     
+  x[x < lims[1] | x > lims[2]]               # locus names in these tails
+}
+
+
+#Now let’s apply it to each significant constrained axis
+
+cand1 <- outliers(load.rda[,1],3) 
+cand2 <- outliers(load.rda[,2],3) 
+cand3 <- outliers(load.rda[,3],3) 
+
+length(cand1)
+length(cand2)
+length(cand3)
+
+ncand <- length(cand1) + length(cand2) + length(cand3)
+ncand # 278 candidate SNPs for local adaptation
+
+#Next, we’ll organize our results by making one data frame with the axis, SNP name, loading, & correlation with each predictor:
+  
+cand1 <- cbind.data.frame(rep(1,times=length(cand1)), names(cand1), unname(cand1))
+cand2 <- cbind.data.frame(rep(2,times=length(cand2)), names(cand2), unname(cand2))
+cand3 <- cbind.data.frame(rep(3,times=length(cand3)), names(cand3), unname(cand3))
+
+colnames(cand1) <- colnames(cand2) <- colnames(cand3) <- c("axis","snp","loading")
+
+cand <- rbind(cand1, cand2, cand3)
+cand$snp <- as.character(cand$snp)
+
+#Let’s add in the correlations of each candidate SNP with the environmental predictors:
+  
+foo <- matrix(nrow=(ncand), ncol=4)  # 4 columns for 4 predictors
+colnames(foo) <- c("BIO1", "BIO2", "BIO8", "BIO14")
+
+
+for (i in 1:length(cand$snp)) {
+  nam <- cand[i,2]
+  snp.gen <- gen.imp[,nam]
+  foo[i,] <- apply(predictors,2,function(x) cor(x,snp.gen))
+}
+
+cand <- cbind.data.frame(cand,foo)  
+head(cand)
+
+#Now we have a data frame of the candidate SNPs and their correlation with our environmental predictors!
+
+#Investigating the candidate SNPs
+#We’ll start off by looking for duplicate detection. These are SNPs that are identified as candidates on more than one RDA axis.
+
+length(cand$snp[duplicated(cand$snp)])  # 0 duplicate detections
+cand <- cand[!duplicated(cand$snp),] # remove duplicate detections
+
+#Next, we’ll see which of the predictors each candidate SNP is most strongly correlated with:
+  
+for (i in 1:length(cand$snp)) {
+  bar <- cand[i,]
+  cand[i,8] <- names(which.max(abs(bar[4:6]))) # gives the variable
+  cand[i,9] <- max(abs(bar[4:6]))              # gives the correlation
+}
+
+
+colnames(cand)[8] <- "predictor"
+colnames(cand)[9] <- "correlation"
+
+table(cand$predictor) 
+
+
+#BIO1 BIO2 BIO8 
+#90  121   67 
+
+#90 SNPs associated with BIO1
+#121 SNPs associated with BIO2
+#67 SNPs associated with BIO8
+
+#Note that, in some cases, correlations may be strong for multiple variables (depending on collinearity among predictors). 
+#It may be useful to consider how candidate SNPs are correlated with multiple predictors. 
+#We could, for example, look at the cand object and investigate correlations with predictors other than the 
+#predictor with the highest correlation coefficient. 
+#However, for this analysis we will focus on the strongest correlations of each SNP with one predictor.
+
+#export table 
+
+write.table(cand, "~/Documents/Jac/Population Genomics/Results/RDA/Candidate SNPs/candidate_SNPs.txt", row.names = FALSE, quote = FALSE, sep = "\t")
+write.csv(cand, "~/Documents/Jac/Population Genomics/Results/RDA/Candidate SNPs/candidate_SNPs.csv", row.names = FALSE)
+
+
+#### Plotting the strongly associated SNPs ####
+#Let’s look at RDA plots again, but this time focus in on the SNPs in the ordination space. 
+#We’ll color code the SNPs based on the predictor variable that they are most strongly correlated with. 
+
+sel <- cand$snp
+env <- cand$predictor
+
+env[env=="BIO1"] <- '#1f78b4'
+env[env=="BIO2"] <- '#6a3d9a'
+env[env=="BIO8"] <- '#33a02c'
+
+# color by predictor:
+col.pred <- rownames(predictors.rda$CCA$v) # pull the SNP names
+predictors.rda$CCA$v
+
+
+# Set a default color for all SNPs
+col.pred[] <- '#f1eef6'  # Light gray for non-candidate SNPs
+
+# Color candidate SNPs based on their predictor
+for (i in 1:length(sel)) {
+  foo <- match(sel[i], col.pred)
+  if (!is.na(foo)) {
+    col.pred[foo] <- env[i]
+  }
+}
+
+# Ensure all values in col.pred are valid colors
+col.pred <- ifelse(col.pred %in% c('#1f78b4', '#6a3d9a', '#33a02c', '#f1eef6'), 
+                   col.pred, '#f1eef6')
+
+empty <- col.pred
+empty[empty == "#f1eef6"] <- rgb(0,1,0, alpha=0)  # transparent
+empty.outline <- ifelse(empty == "#00FF0000", "#00FF0000", "gray32")
+#col.pred[grep("chr",col.pred)] <- '#f1eef6' # non-candidate SNPs
+bg <- c('#1f78b4','#6a3d9a','#33a02c')
+
+
+# axes 1 & 2
+plot(predictors.rda, type="n", scaling=3, xlim=c(-1,1), ylim=c(-1,1))
+points(predictors.rda, display="species", pch=21, cex=1, col="gray32", bg=col.pred, scaling=3)
+points(predictors.rda, display="species", pch=21, cex=1, col=empty.outline, bg=empty, scaling=3)
+text(predictors.rda, scaling=3, display="bp", col="#0868ac", cex=1)
+legend("bottomright", legend=c("BIO4", "BIO13", "BIO18"), bty="n", col="gray32", pch=21, cex=1, pt.bg=bg)
+
+
+#Debugging
+
+print(table(col.pred))
+print(table(empty))
+print(table(empty.outline))
+
+print(head(sel))
+print(table(env))
+
+for (i in 1:length(sel)) {
+  foo <- match(sel[i], rownames(predictors.rda$CCA$v))
+  if (!is.na(foo)) {
+    col.pred[foo] <- env[i]
+    print(paste("Matched SNP:", sel[i], "to color:", env[i]))
+  } else {
+    print(paste("Failed to match SNP:", sel[i]))
+  }
+}
+
+print(table(col.pred))
+
+plot(predictors.rda, type="n", scaling=3, xlim=c(-1,1), ylim=c(-1,1))
+points(predictors.rda, display="species", pch=21, cex=1, col="gray32", bg=col.pred, scaling=3)
+points(predictors.rda, display="species", pch=21, cex=1, col=empty.outline, bg=empty, scaling=3)
+text(predictors.rda, scaling=3, display="bp", col="#0868ac", cex=1)
+legend("bottomright", legend=c("BIO1", "BIO2", "BIO8"), bty="n", col="gray32", pch=21, cex=1, pt.bg=bg)
+
+
 
 
 #______________________________________________________#
@@ -1298,7 +2133,7 @@ library(ggplot2)
 library(vcfR)
 
 # use the library vcfR (the one with all SNPs, and not only the pruned snps)
-vcf_file <- "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Final_VCF/epidendrum-final-variants-removed.maf_miss.vcf"
+vcf_file <- "~/Documents/Jac/Population Genomics/VCF/epidendrum-final-variants-removed.maf_miss.vcf"
 obj.vcfR_allSNPs <- read.vcfR(vcf_file, verbose = FALSE)
 
 # extract information about SNP id and position
@@ -1310,7 +2145,10 @@ id_snp <- getID(obj.vcfR_allSNPs) # ID of the SNP
 chr_pos_allSNPs <- as.data.frame(cbind(id_snp, chromosome, position)) # save info about id, chr, position
 str(chr_pos_allSNPs) # explore the column types
 
-#Like we did before we can plot the XtX but we will mostly be interested in the BF value (Bayesian factor of association with an environmental variable). You will find it in the files ending with betai_reg.out in the column BF.dB. "the Bayes Factor (column BF(dB)) in dB units (i.e., 10 × log10(BF)) measuring the support of the association of each SNP with each population covariable and the corresponding regression coefficients βi (column Beta_is)" BF can be informative in itself, good candidate are usually above 20. Following the rule of Jeffrey, we can consider BF as meaning
+#Like we did before we can plot the XtX but we will mostly be interested in the BF value (Bayesian factor of association with an environmental variable). 
+#You will find it in the files ending with betai_reg.out in the column BF.dB. 
+#"the Bayes Factor (column BF(dB)) in dB units (i.e., 10 × log10(BF)) measuring the support of the association of each SNP with each population covariable and the corresponding regression coefficients βi (column Beta_is)" 
+#BF can be informative in itself, good candidate are usually above 20. Following the rule of Jeffrey, we can consider BF as meaning
 
 #< 3 --> nothing
 #3 to 10 --> weak support
@@ -1318,7 +2156,7 @@ str(chr_pos_allSNPs) # explore the column types
 #more than 20 --> strong support
 
 # load Bayesian Factors values from the new table (from real SNPs dataset)
-BF_allsnps <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/allsnps_environment_controlled.output_summary_betai_reg.out", header = TRUE)
+BF_allsnps <- read.table("~/Documents/Jac/Population Genomics/Results/BayPass/GEA/allsnps_environment_controlled_new.output_summary_betai_reg.out", header = TRUE)
 head(BF_allsnps)
 # we will be working with the BF (the Bayesian Factor) values now
 
@@ -1342,12 +2180,14 @@ ggplot(BF_pos, aes(x = position, y = BF_allsnps$BF.dB., colour = chromosome)) +
 #Now we realised that we really need to know at which value we put the threshold:
 
 # load BF (bayes factor) values from simulated data
-BF_simu <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/simulated_enviroment_controlled.output_summary_betai_reg.out", header = TRUE)
+BF_simu <- read.table("~/Documents/Jac/Population Genomics/Results/BayPass/GEA/simulated_enviroment_controlled_new.output_summary_betai_reg.out", header = TRUE)
 head(BF_simu)
 
 # calculate the threshold
 threshold_fdr0.01 = quantile(BF_simu$BF.dB, probs = 0.99)
 threshold_fdr0.05 = quantile(BF_simu$BF.dB, probs = 0.95)
+threshold_fdr0.001 = quantile(BF_simu$BF.dB, probs = 0.999)
+threshold_BF <- BF_simu %>% filter(BF_simu$BF.dB. > 10)
 
 
 #selecting only the 12 chromosomes
@@ -1359,30 +2199,135 @@ ggplot(BFpos_12chrs, aes(x = position, y = BF.dB., colour = chromosome)) +
   geom_point() +
   theme_classic() +
   facet_grid(cols = vars(chromosome), scales = "free_x", space = "free_x") +
-  geom_hline(aes(yintercept = threshold_fdr0.05), linetype = "dotted", linewidth = 1, col = "red", show.legend = FALSE) +
-  geom_hline(aes(yintercept = threshold_fdr0.01), linetype = "dotted", linewidth = 1, show.legend = FALSE)
+  geom_hline(aes(yintercept = threshold_fdr0.01), linetype = "dotted", linewidth = 1, col = "red", show.legend = FALSE) +
+  geom_hline(aes(yintercept = threshold_fdr0.001), linetype = "dotted", linewidth = 1, show.legend = FALSE) 
+
 
 # output outliers
-BF_pos[BF_pos$BF.dB. >= threshold_fdr0.05, ]
+outliers <- BF_pos[BF_pos$BF.dB. >= threshold_fdr0.001, ]
 
 #### Exporting the outliers that are associated with the environmental variables ####
 
 #We can export the list of outlier SNPs for subsequent analysis. Here is the code for the controlled models.
 
 # load bf values
-bf_allsnps <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/allsnps_environment_controlled.output_summary_betai_reg.out", header = TRUE)
+bf_allsnps <- read.table("~/Documents/Jac/Population Genomics/Tabelas/BayPass/allsnps_environment_controlled.output_summary_betai_reg.out", header = TRUE)
 bf_pos <- cbind(SNP_pos, bf_allsnps)
 
 # load bf values from simulatd data
-bf_simu <- read.table("C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/simulated_enviroment_controlled.output_summary_betai_reg.out", header = TRUE)
+bf_simu <- read.table("~/Documents/Jac/Population Genomics/Tabelas/BayPass/simulated_enviroment_controlled.output_summary_betai_reg.out", header = TRUE)
 
 # calculate the threshold from simulations (or you can use BF = 10)
 threshold_fdr0.01 = quantile(bf_simu$BF.dB, probs = 0.99)
 threshold_fdr0.05 = quantile(bf_simu$BF.dB, probs = 0.95)
+threshold_BF <- bf_simu %>% filter(bf_simu$BF.dB. > 10)
 
-outliers <- bf_pos[bf_pos$BF.dB >= threshold_fdr0.05, ]
+
+outliers <- bf_pos[bf_pos$BF.dB >= threshold_fdr0.001, ]
 outliers
-write.table(outliers, "C:/Users/JacquelineMattos/Documents/Docs_Jac/Doutorado/Analyses/PopulationGenomics/Population_Genomics/Gene-Environment-Association/BayPass/outlier_temp_bp.txt", row.names = FALSE, quote = FALSE, sep = "\t")
+write.table(outliers, "~/Documents/Jac/Population Genomics/Results/BayPass/GEA/outliers_bp.txt", row.names = FALSE, quote = FALSE, sep = "\t")
+write.csv(outliers, "~/Documents/Jac/Population Genomics/Results/BayPass/GEA/outliers_bp.csv", row.names = FALSE)
+
+#______________________________________________________#
+
+#### Identify outliers detected by the two different methods (RDA and BayPass) ####
+
+#It is often recommended to keep only outliers (or SNPs with strong GEA) detected by more than one method to avoid false positive. This will nevertheless also reduce the power of the analysis... a matter of choice? Here we will run a few R command to keep the intersection of our BayPass and RDA outliers. 
+#It is worth noting that since RDA and BayPass works differently, it may not be surprising to have a limited overlap.
+
+# load package
+library(dplyr)
+
+# load outliers tables
+outlier_temp_rda <- read.table("~/Documents/Jac/Population Genomics/Results/RDA/Candidate SNPs/candidate_SNPs.txt", header = TRUE)
+head(outlier_temp_rda)
+nRDA <- dim(outlier_temp_rda)[1]
+nRDA # how many outliers?
+
+outlier_temp_bp <- read.table("~/Documents/Jac/Population Genomics/Results/BayPass/GEA/outliers_bp.txt", header = TRUE)
+head(outlier_temp_bp)
+outlier_temp_bp <- outlier_temp_bp[, c(2, 3, 10)] # we keep snp id, chr, pos and BF
+dim(outlier_temp_bp)
+nBP <- dim(outlier_temp_bp)[1]
+nBP # how many outliers?
+
+#concatenating column chr and position to make a new column named SNP_id just as we have on the RDA table
+outlier_temp_bp$snp <- paste(outlier_temp_bp$chromosome, outlier_temp_bp$position, sep = "_")
+
+
+# join outliers keeping positions present in both the 1st or the 2nd database
+outlier_temp_fulljoin <- dplyr::full_join(outlier_temp_rda, outlier_temp_bp, by = c("snp" = "snp"))
+head(outlier_temp_fulljoin)
+nALL <- dim(outlier_temp_fulljoin)[1]
+nALL # how many in total?
+
+# join outliers keeping positions present in either the 1st or the 2nd database (only the intersection between them)
+outlier_temp_innerjoin <- dplyr::inner_join(outlier_temp_rda, outlier_temp_bp, by = c("snp" = "snp"))
+head(outlier_temp_innerjoin)
+dim(outlier_temp_innerjoin)
+nboth <- dim(outlier_temp_innerjoin)[1]
+nboth # how many joint outliers?
+
+# visualize
+library(ggVennDiagram)
+ggVennDiagram(list(RDA = 1:nRDA, BP = (nRDA + 1 - nboth):(nRDA - nboth + nBP))) + 
+                scale_fill_gradient(high = "#9986A5", low = "#ABDDDE")
+
+
+
+
+#________________________________________________________#
+
+#### Preparing files for identifying the intersections between genes and annotated SNPs ####
+
+# load file
+outlier_temp_rda <- read.table("~/Documents/Jac/Population Genomics/Results/RDA/Candidate SNPs/candidate_SNPs.txt", header = TRUE)
+
+# have a quick look
+head(outlier_temp_rda)
+
+# what's its dimension?
+dim(outlier_temp_rda)
+
+# which size around the SNP
+window <- 10000
+print(window)
+
+# add a vector with start position
+print(head(outlier_temp_rda$position))
+print(length(outlier_temp_rda$position))
+
+outlier_temp_rda$start <- outlier_temp_rda$position - (window / 2)
+
+# start position can't be negative! replace negative by 0
+outlier_temp_rda$start[outlier_temp_rda$start < 0] <- 0
+
+# add a vector with stop position
+outlier_temp_rda$stop <- outlier_temp_rda$position + (window / 2)
+
+# have a look
+head(outlier_temp_rda)
+
+# which columns should we keep?
+outlier_temp_rda_bed <- outlier_temp_rda[, c(2, 5, 6, 1)]
+
+# save your file
+write.table(outlier_temp_rda_bed, "05_bed/outlier_temp_rda.bed", row.names = FALSE, sep = "\t", quote = FALSE, col.names = FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
